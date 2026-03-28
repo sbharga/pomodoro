@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimalist Pomodoro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #efefef;
+            --font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --modal-bg: rgba(18, 18, 18, 0.85);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            transition: background-color 0.5s ease, color 0.5s ease;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent scrolling on main screen */
+        }
+
+        /* Modal glassmorphism */
+        .glass-overlay {
+            background-color: var(--modal-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .glass-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Custom scrollbar for settings */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(150, 150, 150, 0.3);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(150, 150, 150, 0.5);
+        }
+
+        /* Input styling overrides */
+        input[type="number"], input[type="color"] {
+            color: var(--text-color);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        /* Custom Checkbox & Radio Styling */
+        input[type="checkbox"], input[type="radio"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background-color: transparent;
+            border: 1.5px solid currentColor;
+            display: grid;
+            place-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        
+        input[type="checkbox"] {
+            border-radius: 0.25rem;
+        }
+        
+        input[type="radio"] {
+            border-radius: 50%;
+        }
+        
+        input[type="checkbox"]::before {
+            content: "";
+            width: 0.75rem;
+            height: 0.75rem;
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+            transform: scale(0);
+            transition: 120ms transform ease-in-out;
+            background-color: var(--bg-color);
+        }
+        
+        input[type="radio"]::before {
+            content: "";
+            width: 0.4rem;
+            height: 0.4rem;
+            border-radius: 50%;
+            transform: scale(0);
+            transition: 120ms transform ease-in-out;
+            background-color: var(--bg-color);
+        }
+        
+        input[type="checkbox"]:checked, input[type="radio"]:checked {
+            background-color: currentColor;
+        }
+        
+        input[type="checkbox"]:checked::before, input[type="radio"]:checked::before {
+            transform: scale(1);
+        }
+
+        .tab-btn.active {
+            background-color: rgba(255, 255, 255, 0.1);
+            font-weight: 500;
+        }
+
+        .settings-section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .settings-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* SVG icon strokes based on text color */
+        svg {
+            stroke: currentColor;
+        }
+        
+        .fill-current {
+            fill: currentColor;
+        }
+    </style>
+</head>
+<body class="min-h-screen w-full flex flex-col items-center justify-center relative select-none">
+
+    <!-- Top Right Settings Trigger -->
+    <div class="absolute top-0 right-0 p-6 md:p-8 z-10 group">
+        <button id="open-settings" class="opacity-50 md:opacity-0 md:group-hover:opacity-50 transition-opacity duration-300 p-2 outline-none cursor-pointer">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Main Timer Display -->
+    <div class="flex flex-col items-center z-[1]">
+        <h2 id="phase-label" class="text-sm md:text-base tracking-[0.3em] opacity-60 mb-8 font-light transition-all">FOCUS</h2>
+        
+        <div id="time-display" class="text-[6rem] md:text-[10rem] font-light leading-none tracking-tighter mb-12 cursor-pointer transition-transform active:scale-95">
+            25:00
+        </div>
+
+        <div class="flex items-center gap-8 opacity-70">
+            <button id="reset-btn" class="p-3 hover:opacity-100 transition-opacity outline-none cursor-pointer" aria-label="Reset Timer">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                    <path d="M3 3v5h5"></path>
+                </svg>
+            </button>
+            
+            <button id="toggle-btn" class="w-16 h-16 flex items-center justify-center border rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-colors outline-none cursor-pointer" style="border-color: currentColor;">
+                <!-- Play Icon (Default) -->
+                <svg id="play-icon" width="24" height="24" viewBox="0 0 24 24" class="fill-current ml-1" stroke="none">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <!-- Pause Icon (Hidden default) -->
+                <svg id="pause-icon" width="24" height="24" viewBox="0 0 24 24" class="fill-current hidden" stroke="none">
+                    <rect x="6" y="4" width="4" height="16"></rect>
+                    <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Progress Indicators -->
+    <div id="progress-dots" class="absolute bottom-12 flex gap-3 opacity-30">
+        <!-- Dots injected via JS -->
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-50 flex items-center justify-center glass-overlay p-4 md:p-8">
+        <div class="w-full max-w-5xl h-full max-h-[800px] flex flex-col md:flex-row border border-white/10 rounded-3xl overflow-hidden shadow-2xl" style="background-color: rgba(var(--bg-rgb), 0.5);">
+            
+            <!-- Sidebar Navigation -->
+            <div class="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/10 flex flex-col">
+                <div class="p-6 md:p-8 flex justify-between items-center">
+                    <h2 class="text-xl font-light tracking-widest">SETTINGS</h2>
+                    <button id="close-settings-mobile" class="md:hidden opacity-60 hover:opacity-100 p-2">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                
+                <nav class="flex-row flex md:flex-col overflow-x-auto md:overflow-visible px-4 md:px-0 pb-4 md:pb-0 gap-2 md:gap-0">
+                    <button class="tab-btn active w-full text-left px-6 py-4 text-sm tracking-wider opacity-60 hover:opacity-100 transition-all flex items-center gap-3 whitespace-nowrap" data-target="durations">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        Timer
+                    </button>
+                    <button class="tab-btn w-full text-left px-6 py-4 text-sm tracking-wider opacity-60 hover:opacity-100 transition-all flex items-center gap-3 whitespace-nowrap" data-target="appearance">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c1.38 0 2.5-1.12 2.5-2.5 0-.53-.21-1.04-.58-1.41L12 16.17V16c0-1.1.9-2 2-2h1c3.87 0 7-3.13 7-7 0-2.76-3.36-5-7.5-5z"></path></svg>
+                        Appearance
+                    </button>
+                    <button class="tab-btn w-full text-left px-6 py-4 text-sm tracking-wider opacity-60 hover:opacity-100 transition-all flex items-center gap-3 whitespace-nowrap" data-target="preferences">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7"></path><path d="M4 10V3"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M20 21v-5"></path><path d="M20 12V3"></path><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                        Preferences
+                    </button>
+                    <button class="tab-btn w-full text-left px-6 py-4 text-sm tracking-wider opacity-60 hover:opacity-100 transition-all flex items-center gap-3 whitespace-nowrap" data-target="stats">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                        Statistics
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Content Area -->
+            <div class="flex-1 p-6 md:p-12 overflow-y-auto relative">
+                <button id="close-settings-desktop" class="hidden md:block absolute top-8 right-8 opacity-60 hover:opacity-100 p-2 transition-opacity">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+
+                <!-- Durations Section -->
+                <div id="durations" class="settings-section active max-w-xl">
+                    <h3 class="text-2xl font-light mb-8">Timer Durations</h3>
+                    <div class="space-y-8">
+                        <div class="flex flex-col gap-2">
+                            <label class="text-xs uppercase tracking-wider opacity-60">Focus Time (Minutes)</label>
+                            <input type="number" id="setting-focus" min="1" max="120" class="bg-transparent border-b border-white/20 pb-2 outline-none text-2xl font-light focus:opacity-100 transition-opacity opacity-80 w-full">
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <label class="text-xs uppercase tracking-wider opacity-60">Short Break (Minutes)</label>
+                            <input type="number" id="setting-shortBreak" min="1" max="60" class="bg-transparent border-b border-white/20 pb-2 outline-none text-2xl font-light focus:opacity-100 transition-opacity opacity-80 w-full">
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <label class="text-xs uppercase tracking-wider opacity-60">Long Break (Minutes)</label>
+                            <input type="number" id="setting-longBreak" min="1" max="60" class="bg-transparent border-b border-white/20 pb-2 outline-none text-2xl font-light focus:opacity-100 transition-opacity opacity-80 w-full">
+                        </div>
+                        <div class="flex flex-col gap-2 pt-4">
+                            <label class="text-xs uppercase tracking-wider opacity-60">Long Break Interval (Cycles)</label>
+                            <input type="number" id="setting-longBreakInterval" min="1" max="10" class="bg-transparent border-b border-white/20 pb-2 outline-none text-2xl font-light focus:opacity-100 transition-opacity opacity-80 w-full">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Appearance Section -->
+                <div id="appearance" class="settings-section max-w-xl">
+                    <h3 class="text-2xl font-light mb-8">Appearance</h3>
+                    
+                    <div class="space-y-10">
+                        <!-- Theme Presets -->
+                        <div>
+                            <label class="text-xs uppercase tracking-wider opacity-60 block mb-4">Color Themes</label>
+                            <div id="theme-presets" class="flex flex-wrap gap-3">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <!-- Custom Colors -->
+                        <div class="grid grid-cols-2 gap-8">
+                            <div class="flex flex-col gap-3">
+                                <label class="text-xs uppercase tracking-wider opacity-60">Background Color</label>
+                                <div class="flex items-center gap-4">
+                                    <input type="color" id="setting-bgColor" class="w-10 h-10 rounded-lg cursor-pointer border-0 p-0 bg-transparent">
+                                    <span id="bg-color-val" class="text-sm uppercase tracking-widest font-mono opacity-80"></span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col gap-3">
+                                <label class="text-xs uppercase tracking-wider opacity-60">Text Color</label>
+                                <div class="flex items-center gap-4">
+                                    <input type="color" id="setting-textColor" class="w-10 h-10 rounded-lg cursor-pointer border-0 p-0 bg-transparent">
+                                    <span id="text-color-val" class="text-sm uppercase tracking-widest font-mono opacity-80"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Typography -->
+                        <div>
+                            <label class="text-xs uppercase tracking-wider opacity-60 block mb-4">Typography</label>
+                            <div class="flex flex-col gap-3">
+                                <label class="flex items-center gap-4 cursor-pointer p-3 border border-white/10 rounded-xl hover:bg-white/5 transition-colors">
+                                    <input type="radio" name="fontFamily" value="sans" class="w-4 h-4">
+                                    <span class="font-sans text-lg">Sans Serif (Modern)</span>
+                                </label>
+                                <label class="flex items-center gap-4 cursor-pointer p-3 border border-white/10 rounded-xl hover:bg-white/5 transition-colors">
+                                    <input type="radio" name="fontFamily" value="serif" class="w-4 h-4">
+                                    <span class="font-serif text-lg">Serif (Classic)</span>
+                                </label>
+                                <label class="flex items-center gap-4 cursor-pointer p-3 border border-white/10 rounded-xl hover:bg-white/5 transition-colors">
+                                    <input type="radio" name="fontFamily" value="mono" class="w-4 h-4">
+                                    <span class="font-mono text-lg">Monospace (Code)</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Preferences Section -->
+                <div id="preferences" class="settings-section max-w-xl">
+                    <h3 class="text-2xl font-light mb-8">Preferences</h3>
+                    
+                    <div class="space-y-4">
+                        <label class="flex items-center justify-between p-4 border border-white/10 rounded-xl hover:bg-white/5 transition-colors cursor-pointer">
+                            <div>
+                                <div class="text-lg">Auto-start Breaks</div>
+                                <div class="text-xs opacity-50 mt-1">Automatically begin timer when a focus session ends</div>
+                            </div>
+                            <input type="checkbox" id="setting-autoStartBreaks" class="w-5 h-5">
+                        </label>
+
+                        <label class="flex items-center justify-between p-4 border border-white/10 rounded-xl hover:bg-white/5 transition-colors cursor-pointer">
+                            <div>
+                                <div class="text-lg">Auto-start Focus</div>
+                                <div class="text-xs opacity-50 mt-1">Automatically begin timer when a break ends</div>
+                            </div>
+                            <input type="checkbox" id="setting-autoStartFocus" class="w-5 h-5">
+                        </label>
+
+                        <div class="flex flex-col p-4 border border-white/10 rounded-xl hover:bg-white/5 transition-colors">
+                            <label class="flex items-center justify-between cursor-pointer w-full mb-4">
+                                <div>
+                                    <div class="text-lg">Sound Effects</div>
+                                    <div class="text-xs opacity-50 mt-1">Play a chime when a timer completes</div>
+                                </div>
+                                <input type="checkbox" id="setting-soundEnabled" class="w-5 h-5">
+                            </label>
+                            <div class="flex items-center gap-4 w-full opacity-70 px-1">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                                <input type="range" id="setting-volume" min="0" max="1" step="0.05" class="flex-1 accent-current cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics Section -->
+                <div id="stats" class="settings-section max-w-xl">
+                    <h3 class="text-2xl font-light mb-8">Your Statistics</h3>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div class="p-8 border border-white/10 rounded-2xl bg-white/5">
+                            <div id="stat-pomodoros" class="text-5xl font-light mb-3">0</div>
+                            <div class="text-xs uppercase tracking-wider opacity-60">Pomodoros Completed</div>
+                        </div>
+                        <div class="p-8 border border-white/10 rounded-2xl bg-white/5">
+                            <div id="stat-hours" class="text-5xl font-light mb-3">0h 0m</div>
+                            <div class="text-xs uppercase tracking-wider opacity-60">Total Focus Time</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-12 p-6 border border-red-500/30 rounded-xl bg-red-500/5">
+                        <h4 class="text-red-500/80 mb-2 uppercase tracking-wider text-xs font-bold">Danger Zone</h4>
+                        <button id="reset-stats-btn" class="px-4 py-2 border border-red-500/50 text-red-500/80 rounded hover:bg-red-500/10 transition-colors text-sm">
+                            Reset All Statistics
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Default Configuration & Themes ---
+        const THEMES = [
+            { id: 'dark', bg: '#121212', text: '#efefef', name: 'Dark' },
+            { id: 'light', bg: '#fafafa', text: '#1a1a1a', name: 'Light' },
+            { id: 'matcha', bg: '#e8f0e5', text: '#4a5c48', name: 'Matcha' },
+            { id: 'midnight', bg: '#0f172a', text: '#94a3b8', name: 'Midnight' },
+            { id: 'coffee', bg: '#3e2723', text: '#d7ccc8', name: 'Coffee' },
+            { id: 'ocean', bg: '#003049', text: '#eae2b7', name: 'Ocean' }
+        ];
+
+        const FONTS = {
+            'sans': 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
+            'serif': 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
+            'mono': 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+        };
+
+        const DEFAULT_SETTINGS = {
+            focus: 25,
+            shortBreak: 5,
+            longBreak: 15,
+            longBreakInterval: 4,
+            autoStartBreaks: false,
+            autoStartFocus: false,
+            soundEnabled: true,
+            volume: 0.5,
+            theme: THEMES[0],
+            font: 'sans'
+        };
+
+        const DEFAULT_STATS = {
+            completedPomodoros: 0,
+            totalFocusSeconds: 0
+        };
+
+        // --- Application State ---
+        let state = {
+            mode: 'focus', // 'focus', 'shortBreak', 'longBreak'
+            timeLeft: 0,
+            isRunning: false,
+            cycle: 0,
+            settings: { ...DEFAULT_SETTINGS },
+            stats: { ...DEFAULT_STATS },
+            timerInterval: null
+        };
+
+        // --- Utility Functions ---
+        const hexToRgb = (hex) => {
+            let r = 0, g = 0, b = 0;
+            // 3 digits
+            if (hex.length == 4) {
+                r = "0x" + hex[1] + hex[1];
+                g = "0x" + hex[2] + hex[2];
+                b = "0x" + hex[3] + hex[3];
+            // 6 digits
+            } else if (hex.length == 7) {
+                r = "0x" + hex[1] + hex[2];
+                g = "0x" + hex[3] + hex[4];
+                b = "0x" + hex[5] + hex[6];
+            }
+            return `${+r}, ${+g}, ${+b}`;
+        };
+
+        const formatTime = (seconds) => {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        };
+
+        const formatStatsTime = (totalSeconds) => {
+            const h = Math.floor(totalSeconds / 3600);
+            const m = Math.floor((totalSeconds % 3600) / 60);
+            return `${h}h ${m}m`;
+        };
+
+        const playChime = () => {
+            if (!state.settings.soundEnabled || state.settings.volume === 0) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 1);
+                
+                gain.gain.setValueAtTime(state.settings.volume, ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1);
+                
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 1);
+            } catch (e) {
+                console.log("Audio not supported or blocked");
+            }
+        };
+
+        // --- State Management ---
+        const loadState = () => {
+            try {
+                const savedSettings = localStorage.getItem('pomo-settings');
+                if (savedSettings) state.settings = { ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) };
+                
+                const savedStats = localStorage.getItem('pomo-stats');
+                if (savedStats) state.stats = { ...DEFAULT_STATS, ...JSON.parse(savedStats) };
+            } catch (e) {
+                console.error("Error loading state", e);
+            }
+            
+            // Initial Time Setup
+            state.timeLeft = state.settings.focus * 60;
+            applyTheme();
+        };
+
+        const saveSettings = () => {
+            localStorage.setItem('pomo-settings', JSON.stringify(state.settings));
+            applyTheme();
+        };
+
+        const saveStats = () => {
+            localStorage.setItem('pomo-stats', JSON.stringify(state.stats));
+            updateStatsDisplay();
+        };
+
+        // --- DOM Elements ---
+        const els = {
+            timeDisplay: document.getElementById('time-display'),
+            phaseLabel: document.getElementById('phase-label'),
+            progressDots: document.getElementById('progress-dots'),
+            toggleBtn: document.getElementById('toggle-btn'),
+            resetBtn: document.getElementById('reset-btn'),
+            playIcon: document.getElementById('play-icon'),
+            pauseIcon: document.getElementById('pause-icon'),
+            
+            // Modal
+            modal: document.getElementById('settings-modal'),
+            openBtn: document.getElementById('open-settings'),
+            closeDesktop: document.getElementById('close-settings-desktop'),
+            closeMobile: document.getElementById('close-settings-mobile'),
+            tabBtns: document.querySelectorAll('.tab-btn'),
+            sections: document.querySelectorAll('.settings-section'),
+            
+            // Inputs
+            inputs: {
+                focus: document.getElementById('setting-focus'),
+                shortBreak: document.getElementById('setting-shortBreak'),
+                longBreak: document.getElementById('setting-longBreak'),
+                longBreakInterval: document.getElementById('setting-longBreakInterval'),
+                bgColor: document.getElementById('setting-bgColor'),
+                textColor: document.getElementById('setting-textColor'),
+                autoStartBreaks: document.getElementById('setting-autoStartBreaks'),
+                autoStartFocus: document.getElementById('setting-autoStartFocus'),
+                soundEnabled: document.getElementById('setting-soundEnabled'),
+                volume: document.getElementById('setting-volume')
+            },
+            
+            // UI Text
+            bgColorVal: document.getElementById('bg-color-val'),
+            textColorVal: document.getElementById('text-color-val'),
+            themePresets: document.getElementById('theme-presets'),
+            
+            // Stats
+            statPomodoros: document.getElementById('stat-pomodoros'),
+            statHours: document.getElementById('stat-hours'),
+            resetStatsBtn: document.getElementById('reset-stats-btn')
+        };
+
+        // --- Core Logic ---
+        const applyTheme = () => {
+            const root = document.documentElement;
+            const theme = state.settings.theme;
+            
+            root.style.setProperty('--bg-color', theme.bg);
+            root.style.setProperty('--text-color', theme.text);
+            root.style.setProperty('--font-family', FONTS[state.settings.font]);
+            
+            // Calculate RGB for semi-transparent modal background
+            const rgb = hexToRgb(theme.bg);
+            root.style.setProperty('--modal-bg', `rgba(${rgb}, 0.85)`);
+            root.style.setProperty('--bg-rgb', rgb);
+
+            // Update inputs
+            els.inputs.bgColor.value = theme.bg;
+            els.inputs.textColor.value = theme.text;
+            els.bgColorVal.textContent = theme.bg;
+            els.textColorVal.textContent = theme.text;
+            
+            // Re-render presets to show active state
+            renderThemePresets();
+        };
+
+        const renderDisplay = () => {
+            els.timeDisplay.textContent = formatTime(state.timeLeft);
+            
+            let label = 'FOCUS';
+            if (state.mode === 'shortBreak') label = 'SHORT BREAK';
+            if (state.mode === 'longBreak') label = 'LONG BREAK';
+            els.phaseLabel.textContent = label;
+
+            // Toggle play/pause icons
+            if (state.isRunning) {
+                els.playIcon.classList.add('hidden');
+                els.pauseIcon.classList.remove('hidden');
+            } else {
+                els.playIcon.classList.remove('hidden');
+                els.pauseIcon.classList.add('hidden');
+            }
+
+            renderProgressDots();
+            document.title = `${formatTime(state.timeLeft)} - ${label}`;
+        };
+
+        const renderProgressDots = () => {
+            els.progressDots.innerHTML = '';
+            for (let i = 0; i < state.settings.longBreakInterval; i++) {
+                const dot = document.createElement('div');
+                dot.className = `w-2 h-2 rounded-full transition-all duration-500 border border-current`;
+                if (i < state.cycle % state.settings.longBreakInterval) {
+                    dot.classList.add('bg-current', 'opacity-100', 'scale-125');
+                }
+                els.progressDots.appendChild(dot);
+            }
+        };
+
+        const updateStatsDisplay = () => {
+            els.statPomodoros.textContent = state.stats.completedPomodoros;
+            els.statHours.textContent = formatStatsTime(state.stats.totalFocusSeconds);
+        };
+
+        const populateSettingsModal = () => {
+            els.inputs.focus.value = state.settings.focus;
+            els.inputs.shortBreak.value = state.settings.shortBreak;
+            els.inputs.longBreak.value = state.settings.longBreak;
+            els.inputs.longBreakInterval.value = state.settings.longBreakInterval;
+            
+            els.inputs.autoStartBreaks.checked = state.settings.autoStartBreaks;
+            els.inputs.autoStartFocus.checked = state.settings.autoStartFocus;
+            els.inputs.soundEnabled.checked = state.settings.soundEnabled;
+            els.inputs.volume.value = state.settings.volume;
+
+            const fontRadios = document.querySelectorAll('input[name="fontFamily"]');
+            fontRadios.forEach(radio => {
+                radio.checked = radio.value === state.settings.font;
+            });
+            
+            updateStatsDisplay();
+            renderThemePresets();
+        };
+
+        const renderThemePresets = () => {
+            els.themePresets.innerHTML = '';
+            THEMES.forEach(t => {
+                const btn = document.createElement('button');
+                const isActive = state.settings.theme.name === t.name;
+                btn.className = `px-4 py-2 rounded-full text-xs tracking-wider transition-all border`;
+                btn.style.backgroundColor = t.bg;
+                btn.style.color = t.text;
+                btn.style.borderColor = isActive ? t.text : `${t.text}33`;
+                btn.textContent = t.name;
+                
+                btn.onclick = () => {
+                    state.settings.theme = { bg: t.bg, text: t.text, name: t.name };
+                    saveSettings();
+                };
+                els.themePresets.appendChild(btn);
+            });
+        };
+
+        // --- Timer Controls ---
+        const startTimer = () => {
+            if (state.isRunning) return;
+            state.isRunning = true;
+            renderDisplay();
+
+            state.timerInterval = setInterval(() => {
+                if (state.timeLeft > 0) {
+                    state.timeLeft--;
+                    renderDisplay();
+                } else {
+                    handlePhaseComplete();
+                }
+            }, 1000);
+        };
+
+        const pauseTimer = () => {
+            state.isRunning = false;
+            clearInterval(state.timerInterval);
+            renderDisplay();
+        };
+
+        const toggleTimer = () => {
+            state.isRunning ? pauseTimer() : startTimer();
+        };
+
+        const resetTimer = () => {
+            pauseTimer();
+            const duration = state.mode === 'focus' ? state.settings.focus : 
+                             state.mode === 'shortBreak' ? state.settings.shortBreak : 
+                             state.settings.longBreak;
+            state.timeLeft = duration * 60;
+            renderDisplay();
+        };
+
+        const handlePhaseComplete = () => {
+            pauseTimer();
+            playChime();
+
+            if (state.mode === 'focus') {
+                // Update Stats
+                state.stats.completedPomodoros++;
+                state.stats.totalFocusSeconds += state.settings.focus * 60;
+                saveStats();
+
+                // Determine next phase
+                state.cycle++;
+                if (state.cycle % state.settings.longBreakInterval === 0) {
+                    state.mode = 'longBreak';
+                    state.timeLeft = state.settings.longBreak * 60;
+                } else {
+                    state.mode = 'shortBreak';
+                    state.timeLeft = state.settings.shortBreak * 60;
+                }
+                
+                if (state.settings.autoStartBreaks) startTimer();
+
+            } else {
+                // Return to focus
+                state.mode = 'focus';
+                state.timeLeft = state.settings.focus * 60;
+                
+                if (state.settings.autoStartFocus) startTimer();
+            }
+            
+            renderDisplay();
+        };
+
+        // --- Event Listeners ---
+        const initEventListeners = () => {
+            // Main Controls
+            els.toggleBtn.addEventListener('click', toggleTimer);
+            els.timeDisplay.addEventListener('click', toggleTimer);
+            els.resetBtn.addEventListener('click', resetTimer);
+
+            // Modal Controls
+            const openModal = () => {
+                populateSettingsModal();
+                els.modal.classList.add('active');
+            };
+            const closeModal = () => els.modal.classList.remove('active');
+
+            els.openBtn.addEventListener('click', openModal);
+            els.closeDesktop.addEventListener('click', closeModal);
+            els.closeMobile.addEventListener('click', closeModal);
+            
+            // Close on backdrop click
+            els.modal.addEventListener('click', (e) => {
+                if (e.target === els.modal) closeModal();
+            });
+
+            // Tab Switching
+            els.tabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    els.tabBtns.forEach(b => b.classList.remove('active'));
+                    els.sections.forEach(s => s.classList.remove('active'));
+                    
+                    btn.classList.add('active');
+                    document.getElementById(btn.dataset.target).classList.add('active');
+                });
+            });
+
+            // Settings Inputs
+            const handleDurationChange = (key, inputEl) => {
+                let val = parseInt(inputEl.value);
+                if (isNaN(val) || val < 1) val = 1;
+                state.settings[key] = val;
+                saveSettings();
+                if (!state.isRunning) resetTimer(); // Apply immediately if not running
+            };
+
+            els.inputs.focus.addEventListener('change', (e) => handleDurationChange('focus', e.target));
+            els.inputs.shortBreak.addEventListener('change', (e) => handleDurationChange('shortBreak', e.target));
+            els.inputs.longBreak.addEventListener('change', (e) => handleDurationChange('longBreak', e.target));
+            els.inputs.longBreakInterval.addEventListener('change', (e) => handleDurationChange('longBreakInterval', e.target));
+
+            // Preferences Inputs
+            els.inputs.autoStartBreaks.addEventListener('change', (e) => { state.settings.autoStartBreaks = e.target.checked; saveSettings(); });
+            els.inputs.autoStartFocus.addEventListener('change', (e) => { state.settings.autoStartFocus = e.target.checked; saveSettings(); });
+            els.inputs.soundEnabled.addEventListener('change', (e) => { state.settings.soundEnabled = e.target.checked; saveSettings(); });
+            
+            els.inputs.volume.addEventListener('input', (e) => { 
+                state.settings.volume = parseFloat(e.target.value); 
+                saveSettings(); 
+            });
+            els.inputs.volume.addEventListener('change', () => {
+                // Play test chime when user releases slider
+                playChime();
+            });
+
+            // Font Radios
+            document.querySelectorAll('input[name="fontFamily"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    state.settings.font = e.target.value;
+                    saveSettings();
+                });
+            });
+
+            // Custom Colors
+            const handleCustomColor = () => {
+                state.settings.theme = { 
+                    bg: els.inputs.bgColor.value, 
+                    text: els.inputs.textColor.value, 
+                    name: 'Custom' 
+                };
+                saveSettings();
+            };
+            els.inputs.bgColor.addEventListener('input', handleCustomColor);
+            els.inputs.textColor.addEventListener('input', handleCustomColor);
+
+            // Stats Reset
+            els.resetStatsBtn.addEventListener('click', () => {
+                if(confirm('Are you sure you want to delete all statistics? This cannot be undone.')){
+                    state.stats = { ...DEFAULT_STATS };
+                    state.cycle = 0;
+                    saveStats();
+                    renderProgressDots();
+                }
+            });
+        };
+
+        // --- Initialization ---
+        const init = () => {
+            loadState();
+            initEventListeners();
+            renderDisplay();
+        };
+
+        // Start App
+        init();
+
+    </script>
+</body>
+</html>
