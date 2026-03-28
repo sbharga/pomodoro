@@ -176,6 +176,13 @@
                     <rect x="14" y="4" width="4" height="16"></rect>
                 </svg>
             </button>
+
+            <button id="skip-btn" class="p-3 hover:opacity-100 transition-opacity outline-none cursor-pointer" aria-label="Skip Phase">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                    <line x1="19" y1="5" x2="19" y2="19"></line>
+                </svg>
+            </button>
         </div>
     </div>
 
@@ -443,21 +450,34 @@
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 if (!AudioContext) return;
                 const ctx = new AudioContext();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
+                const now = ctx.currentTime;
+                const volume = state.settings.volume;
+
+                const playBellNode = (freq, delay, dur, vol) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    
+                    gain.gain.setValueAtTime(0, now + delay);
+                    gain.gain.linearRampToValueAtTime(vol * volume, now + delay + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + delay + dur);
+                    
+                    osc.start(now + delay);
+                    osc.stop(now + delay + dur);
+                };
+
+                // Play a pleasant two-tone "ding-dong" resonant bell chime
+                // First note (B5 + Harmonic)
+                playBellNode(987.77, 0, 1.5, 0.4); 
+                playBellNode(1975.53, 0, 1.0, 0.1); 
                 
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(800, ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 1);
-                
-                gain.gain.setValueAtTime(state.settings.volume, ctx.currentTime);
-                gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1);
-                
-                osc.start(ctx.currentTime);
-                osc.stop(ctx.currentTime + 1);
+                // Second note (E5 + Harmonic)
+                playBellNode(659.25, 0.4, 2.5, 0.5); 
+                playBellNode(1318.51, 0.4, 2.0, 0.1); 
             } catch (e) {
                 console.log("Audio not supported or blocked");
             }
@@ -497,6 +517,7 @@
             progressDots: document.getElementById('progress-dots'),
             toggleBtn: document.getElementById('toggle-btn'),
             resetBtn: document.getElementById('reset-btn'),
+            skipBtn: document.getElementById('skip-btn'),
             playIcon: document.getElementById('play-icon'),
             pauseIcon: document.getElementById('pause-icon'),
             
@@ -669,6 +690,28 @@
             renderDisplay();
         };
 
+        const skipPhase = () => {
+            pauseTimer();
+            
+            if (state.mode === 'focus') {
+                // Determine next phase without adding to stats (since it was skipped)
+                state.cycle++;
+                if (state.cycle % state.settings.longBreakInterval === 0) {
+                    state.mode = 'longBreak';
+                    state.timeLeft = state.settings.longBreak * 60;
+                } else {
+                    state.mode = 'shortBreak';
+                    state.timeLeft = state.settings.shortBreak * 60;
+                }
+            } else {
+                // Return to focus
+                state.mode = 'focus';
+                state.timeLeft = state.settings.focus * 60;
+            }
+            
+            renderDisplay();
+        };
+
         const handlePhaseComplete = () => {
             pauseTimer();
             playChime();
@@ -708,6 +751,25 @@
             els.toggleBtn.addEventListener('click', toggleTimer);
             els.timeDisplay.addEventListener('click', toggleTimer);
             els.resetBtn.addEventListener('click', resetTimer);
+            els.skipBtn.addEventListener('click', skipPhase);
+
+            // Keyboard Shortcuts
+            document.addEventListener('keydown', (e) => {
+                // Ignore if modal is open or user is typing in an input
+                if (els.modal.classList.contains('active')) return;
+                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+                if (e.code === 'Space') {
+                    e.preventDefault(); // Prevent page scrolling
+                    toggleTimer();
+                } else if (e.code === 'ArrowRight' || e.code === 'KeyN') {
+                    e.preventDefault();
+                    skipPhase();
+                } else if (e.code === 'KeyR') {
+                    e.preventDefault();
+                    resetTimer();
+                }
+            });
 
             // Modal Controls
             const openModal = () => {
