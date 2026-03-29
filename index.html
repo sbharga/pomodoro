@@ -412,7 +412,8 @@
             cycle: 0,
             settings: { ...DEFAULT_SETTINGS },
             stats: { ...DEFAULT_STATS },
-            timerInterval: null
+            timerInterval: null,
+            endTime: null
         };
 
         // --- Utility Functions ---
@@ -659,21 +660,39 @@
         const startTimer = () => {
             if (state.isRunning) return;
             state.isRunning = true;
+            
+            // Calculate the exact real-world time this timer should end
+            state.endTime = Date.now() + (state.timeLeft * 1000);
             renderDisplay();
 
             state.timerInterval = setInterval(() => {
-                if (state.timeLeft > 0) {
-                    state.timeLeft--;
-                    renderDisplay();
+                const now = Date.now();
+                const remaining = Math.round((state.endTime - now) / 1000);
+                
+                if (remaining > 0) {
+                    // Only re-render if the second has actually changed
+                    if (state.timeLeft !== remaining) {
+                        state.timeLeft = remaining;
+                        renderDisplay();
+                    }
                 } else {
+                    state.timeLeft = 0;
                     handlePhaseComplete();
                 }
-            }, 1000);
+            }, 200); // Run faster than 1s to ensure UI updates exactly when the second rolls over
         };
 
         const pauseTimer = () => {
             state.isRunning = false;
             clearInterval(state.timerInterval);
+            
+            // Lock in the exact remaining time when paused
+            if (state.endTime) {
+                const now = Date.now();
+                state.timeLeft = Math.max(0, Math.round((state.endTime - now) / 1000));
+                state.endTime = null;
+            }
+            
             renderDisplay();
         };
 
